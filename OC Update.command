@@ -6,6 +6,10 @@ oc_url="https://github.com/acidanthera/OpenCorePkg"
 # aptio_url="https://github.com/acidanthera/AptioFixPkg"
 apple_url="https://github.com/acidanthera/AppleSupportPkg"
 ocshell_url="https://github.com/acidanthera/OpenCoreShell"
+to_copy="TRUE"
+if [ "$1" == "-nocopy" ]; then
+    to_copy="FALSE"
+fi
 
 function clone_and_build () {
     local name="$1"
@@ -60,6 +64,10 @@ done
 rm -rf "$temp"
 
 # COMMENT
+if [ "$to_copy" != "TRUE" ]; then
+    echo "Done."
+    exit 0
+fi
 
 # Check for OC's UUID
 uuid="$(nvram 4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:boot-path | sed 's/.*GPT,\([^,]*\),.*/\1/')"

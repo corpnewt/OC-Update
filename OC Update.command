@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+clear
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 oc_url="https://github.com/acidanthera/OpenCorePkg"
@@ -8,6 +10,7 @@ apple_url="https://github.com/acidanthera/AppleSupportPkg"
 ocshell_url="https://github.com/acidanthera/OpenCoreShell"
 to_copy="TRUE"
 if [ "$1" == "-nocopy" ]; then
+    echo "-- Only Building - WILL NOT Copy to ESP --"
     to_copy="FALSE"
 fi
 
@@ -28,8 +31,6 @@ function clone_and_build () {
     fi
     ./macbuild.tool
 }
-
-clear
 
 if [ -e "$DIR/OC" ]; then
     echo "Removing previously built drivers..."
@@ -54,7 +55,7 @@ clone_and_build "OpenCoreShell" "$ocshell_url" "$temp"
 
 # Now we find all the .efi files and copy them to the OC folder
 cd "$temp"
-find . -name '*.efi' | grep -i release | grep -iv debug | grep -iv noop | grep -iv output | while read f; do
+find . -name '*.efi' | grep -Eiv "(DEBUG|NOOP|OUTPUT|IA32)" | grep -i release | while read f; do
     name="$(basename "$f")"
     echo "Copying $name to local OC folder..."
     cp "$f" "$DIR/OC"

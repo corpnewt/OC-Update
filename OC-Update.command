@@ -6,8 +6,8 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 oc_url="https://github.com/acidanthera/OpenCorePkg"
 # aptio_url="https://github.com/acidanthera/AptioFixPkg"
-apple_url="https://github.com/acidanthera/AppleSupportPkg"
-ocshell_url="https://github.com/acidanthera/OpenCoreShell"
+# apple_url="https://github.com/acidanthera/AppleSupportPkg"
+# ocshell_url="https://github.com/acidanthera/OpenCoreShell"
 to_copy="TRUE"
 if [ "$1" == "-nocopy" ]; then
     echo "-- Only Building - WILL NOT Copy to ESP --"
@@ -29,7 +29,15 @@ function clone_and_build () {
         echo " - Linking $name..."
         ln -s "$temp/$name" "$temp/UDK/$name"
     fi
-    ./macbuild.tool
+    if [ -e "build_oc.tool" ]; then
+        echo " - Running build_oc.tool"
+        ./build_oc.tool
+    elif [ -e "macbuild.tool" ]; then
+        echo " - Running macbuild.tool"
+        ./macbuild.tool
+    else
+        echo " - No known build tool found - skipping."
+    fi
 }
 
 if [ -e "$DIR/OC" ]; then
@@ -50,8 +58,8 @@ cd "$temp" && git clone "https://github.com/acidanthera/audk" -b master --depth=
 # Build the .efi drivers and OC
 clone_and_build "OpenCorePkg" "$oc_url" "$temp"
 # clone_and_build "AptioFixPkg" "$aptio_url" "$temp"
-clone_and_build "AppleSupportPkg" "$apple_url" "$temp"
-clone_and_build "OpenCoreShell" "$ocshell_url" "$temp"
+# clone_and_build "AppleSupportPkg" "$apple_url" "$temp"
+# clone_and_build "OpenCoreShell" "$ocshell_url" "$temp"
 
 # Now we find all the .efi files and copy them to the OC folder
 cd "$temp"

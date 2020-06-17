@@ -19,7 +19,23 @@ to_copy="TRUE"
 if [ "$1" == "-nocopy" ]; then
     echo "-- Only Building - WILL NOT Copy to ESP --"
     to_copy="FALSE"
+elif [ "$1" == "-debug" ]; then
+    echo "-- Building for DEBUG --"
+    TARGETS=DEBUG
+    RTARGETS=DEBUG
 fi
+if [ "$2" == "-nocopy" ]; then
+    echo "-- Only Building - WILL NOT Copy to ESP --"
+    to_copy="FALSE"
+elif [ "$2" == "-debug" ]; then
+    echo "-- Building for DEBUG --"
+    TARGETS=DEBUG
+    RTARGETS=DEBUG
+fi
+
+export ARCHS
+export TARGETS
+export RTARGETS
 
 function clone_and_build () {
     local name="$1"

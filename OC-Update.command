@@ -2,6 +2,13 @@
 
 clear
 
+ARCHS=X64
+TARGETS=RELEASE
+RTARGETS=RELEASE
+export ARCHS
+export TARGETS
+export RTARGETS
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 oc_url="https://github.com/acidanthera/OpenCorePkg"
@@ -54,7 +61,7 @@ mkdir "$DIR/OC"
 
 # Time to clone and build - let's clone the UDK repo first, as all others need this - we need to touch the
 # UDK.ready file to avoid the folder getting removed
-cd "$temp" && git clone "https://github.com/acidanthera/audk" -b master --depth=1 UDK && cd UDK && touch UDK.ready
+# cd "$temp" && git clone "https://github.com/acidanthera/audk" -b master --depth=1 UDK && cd UDK && touch UDK.ready
 # Build the .efi drivers and OC
 clone_and_build "OpenCorePkg" "$oc_url" "$temp"
 # clone_and_build "AptioFixPkg" "$aptio_url" "$temp"

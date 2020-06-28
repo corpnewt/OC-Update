@@ -147,6 +147,10 @@ if [ "$efi" != "" ]; then
                 echo " - Does not belong to OpenCore - skipping..."
             fi
         fi
+        if [ -e "$efi/EFI/OC/Bootstrap/Bootstrap.efi" ]; then
+            echo "Updating Bootstrap.efi..."
+            cp "$DIR/OC/BOOTx64.efi" "$efi/EFI/OC/Bootstrap/Bootstrap.efi"
+        fi
         if [ -d "$efi/EFI/OC/Drivers" ]; then
             echo "Updating efi drivers..."
             ls "$efi/EFI/OC/Drivers" | while read f; do

@@ -142,14 +142,14 @@ if [ "$efi" != "" ]; then
             cat "$efi/EFI/BOOT/BOOTx64.efi" | grep -i OpenCore 2>&1 >/dev/null
             if [ "$?" == "0" ]; then
                 echo " - Belongs to OpenCore - updating..."
-                cp "$DIR/OC/BOOTx64.efi" "$efi/EFI/BOOT/BOOTx64.efi"
+                cp "$DIR/OC/Bootstrap.efi" "$efi/EFI/BOOT/BOOTx64.efi"
             else
                 echo " - Does not belong to OpenCore - skipping..."
             fi
         fi
         if [ -e "$efi/EFI/OC/Bootstrap/Bootstrap.efi" ]; then
             echo "Updating Bootstrap.efi..."
-            cp "$DIR/OC/BOOTx64.efi" "$efi/EFI/OC/Bootstrap/Bootstrap.efi"
+            cp "$DIR/OC/Bootstrap.efi" "$efi/EFI/OC/Bootstrap/Bootstrap.efi"
         fi
         if [ -d "$efi/EFI/OC/Drivers" ]; then
             echo "Updating efi drivers..."

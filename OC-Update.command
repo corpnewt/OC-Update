@@ -92,6 +92,13 @@ find . -name '*.efi' | grep -Eiv "(DEBUG|NOOP|OUTPUT|IA32)" | grep -i release | 
     cp "$f" "$DIR/OC"
 done
 
+# And we'll do the same with anything ending in .plist
+find . -name '*.plist' | while read f; do
+    name="$(basename "$f")"
+    echo "Copying $name to local OC folder..."
+    cp "$f" "$DIR/OC"
+done
+
 # Clean up
 rm -rf "$temp"
 

@@ -16,22 +16,17 @@ oc_url="https://github.com/acidanthera/OpenCorePkg"
 # apple_url="https://github.com/acidanthera/AppleSupportPkg"
 # ocshell_url="https://github.com/acidanthera/OpenCoreShell"
 to_copy="TRUE"
-if [ "$1" == "-nocopy" ]; then
-    echo "-- Only Building - WILL NOT Copy to ESP --"
-    to_copy="FALSE"
-elif [ "$1" == "-debug" ]; then
-    echo "-- Building for DEBUG --"
-    TARGETS=DEBUG
-    RTARGETS=DEBUG
-fi
-if [ "$2" == "-nocopy" ]; then
-    echo "-- Only Building - WILL NOT Copy to ESP --"
-    to_copy="FALSE"
-elif [ "$2" == "-debug" ]; then
-    echo "-- Building for DEBUG --"
-    TARGETS=DEBUG
-    RTARGETS=DEBUG
-fi
+to_reveal="FALSE"
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -nocopy) to_copy="FALSE" ;;
+        -reveal) to_reveal="TRUE" ;;
+        -debug) TARGETS=DEBUG; RTARGETS=DEBUG ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
 
 export ARCHS
 export TARGETS
@@ -83,6 +78,12 @@ clone_and_build "OpenCorePkg" "$oc_url" "$temp"
 # clone_and_build "AptioFixPkg" "$aptio_url" "$temp"
 # clone_and_build "AppleSupportPkg" "$apple_url" "$temp"
 # clone_and_build "OpenCoreShell" "$ocshell_url" "$temp"
+
+# Reveal the built folder if needed
+if [ "$to_reveal" == "TRUE" ]; then
+    open "$temp"
+    read -p "Press [enter] to continue..."
+fi
 
 # Now we find all the .efi files and copy them to the OC folder
 cd "$temp"

@@ -12,17 +12,16 @@ export RTARGETS
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 oc_url="https://github.com/acidanthera/OpenCorePkg"
-# aptio_url="https://github.com/acidanthera/AptioFixPkg"
-# apple_url="https://github.com/acidanthera/AppleSupportPkg"
-# ocshell_url="https://github.com/acidanthera/OpenCoreShell"
 to_copy="TRUE"
 to_reveal="FALSE"
+target_disk="$(nvram 4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:boot-path | sed 's/.*GPT,\([^,]*\),.*/\1/')"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         -nocopy) to_copy="FALSE" ;;
         -reveal) to_reveal="TRUE" ;;
         -debug) TARGETS=DEBUG; RTARGETS=DEBUG ;;
+        -disk) target_disk=$2; shift ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
@@ -71,13 +70,8 @@ echo "Creating OC folder..."
 mkdir "$DIR/OC"
 
 # Time to clone and build - let's clone the UDK repo first, as all others need this - we need to touch the
-# UDK.ready file to avoid the folder getting removed
-# cd "$temp" && git clone "https://github.com/acidanthera/audk" -b master --depth=1 UDK && cd UDK && touch UDK.ready
 # Build the .efi drivers and OC
 clone_and_build "OpenCorePkg" "$oc_url" "$temp"
-# clone_and_build "AptioFixPkg" "$aptio_url" "$temp"
-# clone_and_build "AppleSupportPkg" "$apple_url" "$temp"
-# clone_and_build "OpenCoreShell" "$ocshell_url" "$temp"
 
 # Reveal the built folder if needed
 if [ "$to_reveal" == "TRUE" ]; then
@@ -109,11 +103,9 @@ if [ "$to_copy" != "TRUE" ]; then
     exit 0
 fi
 
-# Check for OC's UUID
-uuid="$(nvram 4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:boot-path | sed 's/.*GPT,\([^,]*\),.*/\1/')"
 mounted=""
 vol_name="EFI"
-if [ "$uuid" == "" ]; then
+if [ "$target_disk" == "" ]; then
     # Check for an existing EFI/ESP
     efi=""
     if [ -d "/Volumes/EFI" ]; then
@@ -123,14 +115,14 @@ if [ "$uuid" == "" ]; then
     fi
 else
     # Got the UUID, see if it's mounted
-    vol_name="$(diskutil info $uuid | grep -i "Volume Name:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
-    efi="$(diskutil info $uuid | grep -i "Mount Point:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
+    vol_name="$(diskutil info "$target_disk" | grep -i "Volume Name:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
+    efi="$(diskutil info "$target_disk" | grep -i "Mount Point:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
     if [ "$efi" == "" ]; then
         # Not mounted
         mounted="False"
         echo "$vol_name not mounted - mounting..."
-        sudo diskutil mount "$uuid"
-        efi="$(diskutil info $uuid | grep -i "Mount Point:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
+        sudo diskutil mount "$target_disk"
+        efi="$(diskutil info "$target_disk" | grep -i "Mount Point:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
     fi
     # One last check - if not mounted, we alert the user
     if [ "$efi" == "" ]; then
@@ -173,7 +165,7 @@ fi
 
 if [ "$mounted" != "" ]; then
     echo "Unmounting $vol_name..."
-    diskutil unmount "$uuid"
+    diskutil unmount "$target_disk"
 fi
 # All done
 echo "Done."

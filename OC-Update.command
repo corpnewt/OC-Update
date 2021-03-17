@@ -57,6 +57,31 @@ function clone_and_build () {
     fi
 }
 
+function find_and_copy () {
+    local source="$1"
+    local dest="$2"
+    local name="$3"
+    local include="$4"
+    local exclude="$5"
+    local dir="$PWD"
+    cd "$source"
+    find . -name "$name" | while read f; do
+        # Make sure that we have a match if we're including something
+        if [ ! -z "$include" ] && [ -z "$(echo "$f" | grep -Ei "$include")" ]; then
+            continue
+        fi
+        # Make sure we *don't* have a match if we're excluding
+        if [ ! -z "$exclude" ] && [ ! -z "$(echo "$f" | grep -Ei "$exclude")" ]; then
+            continue
+        fi
+        # We should have a match here - print it out
+        echo "Copying $(basename "$f") to $(basename "$dest")..."
+        cp "$f" "$dest"
+    done
+    # Restore the original CD
+    cd "$PWD"
+}
+
 if [ -e "$DIR/OC" ]; then
     echo "Removing previously built drivers..."
     rm -rf "$DIR/OC"
@@ -79,20 +104,10 @@ if [ "$to_reveal" == "TRUE" ]; then
     read -p "Press [enter] to continue..."
 fi
 
-# Now we find all the .efi files and copy them to the OC folder
-cd "$temp"
-find . -name '*.efi' | grep -Eiv "(DEBUG|NOOP|OUTPUT|IA32)" | grep -i release | while read f; do
-    name="$(basename "$f")"
-    echo "Copying $name to local OC folder..."
-    cp "$f" "$DIR/OC"
-done
-
-# And we'll do the same with anything ending in .plist
-find . -name '*.plist' | grep -iv "Info.plist" | while read f; do
-    name="$(basename "$f")"
-    echo "Copying $name to local OC folder..."
-    cp "$f" "$DIR/OC"
-done
+# Now we find all .efi, .plist, and .pdf files (excluding some unneeded ones) and copy them over
+find_and_copy "$temp" "$DIR/OC" "*.efi" "release" "(DEBUG|NOOP|OUTPUT|IA32)"
+find_and_copy "$temp" "$DIR/OC" "*.plist" "" "Info.plist"
+find_and_copy "$temp" "$DIR/OC" "*.pdf" "(Configuration|Differences)" ""
 
 # Clean up
 rm -rf "$temp"

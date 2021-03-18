@@ -147,6 +147,7 @@ else
 fi
 # Check if it's OC - and if so, let's replace some stuff
 if [ "$efi" != "" ]; then
+    echo "Updating .efi files..."
     if [ -d "$efi/EFI/OC" ]; then
         if [ -e "$efi/EFI/OC/OpenCore.efi" ]; then
             echo "Updating OpenCore.efi..."

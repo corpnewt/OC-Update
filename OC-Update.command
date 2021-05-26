@@ -108,7 +108,7 @@ function compare_path () {
     local indent="$1"; shift   # Prefix to indent with
     local exclude=("$@")       # An array of names to exclude - will be checked case-insensitively
     local to_skip="FALSE"
-    echo "$indent""Iterating $(basename $source/$path)..."
+    echo "$indent""+ $(basename $source/$path)..."
     ls "$source/$path" | while read f; do
         to_skip="FALSE"
         for e in "${exclude[@]}"; do
@@ -119,7 +119,11 @@ function compare_path () {
         done
         # Skip if we're excluding it
         if [ "$to_skip" == "TRUE" ]; then
-            echo "$indent"" - Skipping $f per exclusions..."
+            prefix="-"
+            if [ -d "$source/$path/$f" ]; then
+                prefix="+"
+            fi
+            echo "$indent""  $prefix $f skipped per exclusions..."
             continue
         fi
         # Check if it already exists - and what type of responses
@@ -128,9 +132,9 @@ function compare_path () {
             # Ensure the target has it if we need it
             if [ ! -d "$dest/$path/$f" ]; then
                 if [ "$response" == "LIST" ]; then
-                    echo "$indent"" - Missing $f..."
+                    echo "$indent""  +-> Missing $f..."
                 else
-                    echo "$indent"" - Copying $f to destination..."
+                    echo "$indent""  +-> Copying $f to destination..."
                     cp -R "$source/$path/$f" "$dest/$path/$f"
                 fi
             else
@@ -138,9 +142,9 @@ function compare_path () {
             fi
         else
             if [ ! -e "$dest/$path/$f" ] && [ "$response" == "LIST" ]; then
-                echo "$indent"" - Missing $f..."
+                echo "$indent""  --> Missing $f..."
             elif [ ! -e "$dest/$path/$f" ] || [ "$response" == "FORCE" ]; then
-                echo "$indent"" - Copying $f..."
+                echo "$indent""  --> Copying $f..."
                 cp "$source/$path/$f" "$dest/$path/$f"
             fi
         fi
@@ -285,7 +289,7 @@ if [ "$efi" != "" ]; then
         else
             response=""
         fi
-        compare_path "" "$DIR/OC/Resources" "$efi/EFI/OC/Resources" "$response" "" "${ex_up[@]}"
+        compare_path "" "$DIR/OC/Resources" "$efi/EFI/OC/Resources" "$response" "  " "${ex_up[@]}"
     fi
 fi
 

@@ -39,7 +39,7 @@ function print_help () {
     echo "  -r, --reveal            reveal the temp folder after building"
     echo "  -g, --debug             build the debug version of OC"
     echo "  -d DISK, --disk DISK    the mount point/identifier to target"
-    echo "  -e NAME, --exclude NAME excludes the passed file/folder name from"
+    echo "  -e NAME, --exclude NAME excludes the passed file/folder regex from"
     echo "                          OpenCanopy Resources to update - can be used"
     echo "                          more than once, case-insensitive"
 }
@@ -64,12 +64,6 @@ done
 export ARCHS
 export TARGETS
 export RTARGETS
-
-# Force all exclusions to upper-case
-ex_up=()
-for e in "${exclusions[@]}"; do
-    ex_up+=( "$(echo "$e" | tr '[:lower:]' '[:upper:]')" )
-done
 
 function clone_and_build () {
     local name="$1"
@@ -112,7 +106,7 @@ function compare_path () {
     ls "$source/$path" | while read f; do
         to_skip="FALSE"
         for e in "${exclude[@]}"; do
-            if [ "$e" == "$(echo "$f" | tr '[:lower:]' '[:upper:]')" ]; then
+            if [ "$(echo "$f" | grep -Ei "$e")" ]; then
                 to_skip="TRUE"
                 break
             fi
@@ -289,7 +283,7 @@ if [ "$efi" != "" ]; then
         else
             response=""
         fi
-        compare_path "" "$DIR/OC/Resources" "$efi/EFI/OC/Resources" "$response" "  " "${ex_up[@]}"
+        compare_path "" "$DIR/OC/Resources" "$efi/EFI/OC/Resources" "$response" "  " "${exclusions[@]}"
     fi
 fi
 

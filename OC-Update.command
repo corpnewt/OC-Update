@@ -102,7 +102,7 @@ function compare_path () {
     local indent="$1"; shift   # Prefix to indent with
     local exclude=("$@")       # An array of names to exclude - will be checked case-insensitively
     local to_skip="FALSE"
-    echo "$indent""+ $(basename $source/$path)..."
+    echo "$indent""+ $(basename "$source/$path")..."
     ls "$source/$path" | while read f; do
         to_skip="FALSE"
         for e in "${exclude[@]}"; do

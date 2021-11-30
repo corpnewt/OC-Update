@@ -39,7 +39,7 @@ function print_help () {
     echo "  -r, --reveal            reveal the temp folder after building"
     echo "  -g, --debug             build the debug version of OC"
     echo "  -d DISK, --disk DISK    the mount point/identifier to target"
-    echo "  -e NAME, --exclude NAME excludes the passed file/folder regex from"
+    echo "  -e NAME, --exclude NAME regex to exclude matching file/folder names from"
     echo "                          OpenCanopy Resources to update - can be used"
     echo "                          more than once, case-insensitive"
 }

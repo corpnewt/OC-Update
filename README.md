@@ -1,7 +1,7 @@
 # OC-Update
 Bash script to update OpenCore and some efi drivers
 
-# Help Output
+## Help Output
 
     usage: OC-Update.command [-h] [-c] [-b] [-o] [-f] [-l] [-r] [-g]
                          [-d DISK] [-e NAME] [-e NAME] [-e...]

@@ -18,6 +18,7 @@ to_build="TRUE"
 to_opencanopy="TRUE"
 to_force="FALSE"
 to_reveal="FALSE"
+copy_zip="TRUE"
 
 exclusions=()
 target_disk="$(nvram 4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:boot-path | sed 's/.*GPT,\([^,]*\),.*/\1/')"
@@ -37,7 +38,10 @@ function print_help () {
     echo "  -f, --force             force update OpenCanopy Resources - overrides -l"
     echo "  -l, --list-changes      only list OpenCanopy changes, don't update files"
     echo "  -r, --reveal            reveal the temp folder after building"
-    echo "  -g, --debug             build the debug version of OC"
+    echo "  -i, --ia32              build IA32 (32-bit) instead of X64 (64-bit)"
+    echo "  -g, --debug             build the debug version of OC and .efi drivers"
+    echo "  -z, --no-zip            don't copy the OpenCore-[version]-[target].zip to"
+    echo "                          the OC folder"
     echo "  -d DISK, --disk DISK    the mount point/identifier to target"
     echo "  -e NAME, --exclude NAME regex to exclude matching file/folder names from"
     echo "                          OpenCanopy Resources to update - can be used"
@@ -53,7 +57,9 @@ while [[ "$#" -gt 0 ]]; do
         -f|--force) to_force="TRUE" ;;
         -l|--list-changes) to_list="TRUE" ;;
         -r|--reveal) to_reveal="TRUE" ;;
+        -i|--ia32) ARCHS=IA32 ;;
         -g|--debug) TARGETS=DEBUG; RTARGETS=DEBUG ;;
+        -z|--no-zip) copy_zip="FALSE" ;;
         -d|--disk) target_disk="$2"; shift ;;
         -e|--exclude) exclusions+=( "$2" ); shift ;;
         *) echo "Unknown parameter passed: $1"; print_help; exit 1 ;;
@@ -149,11 +155,12 @@ function find_and_copy () {
     local source="$1"
     local dest="$2"
     local name="$3"
-    local include="$4"
-    local exclude="$5"
+    local args="$4"
+    local include="$5"
+    local exclude="$6"
     local dir="$PWD"
     cd "$source"
-    find . -name "$name" | while read f; do
+    find . -name "$name" $(echo $args) | while read f; do
         # Make sure that we have a match if we're including something
         if [ ! -z "$include" ] && [ -z "$(echo "$f" | grep -Ei "$include")" ]; then
             continue
@@ -193,10 +200,51 @@ if [ "$to_build" != "FALSE" ]; then
         read -p "Press [enter] to continue..."
     fi
 
-    # Now we find all .efi, .plist, and .pdf files (excluding some unneeded ones) and copy them over
-    find_and_copy "$temp" "$DIR/OC" "*.efi" "(release|OcBinaryData)" "(DEBUG|NOOP|OUTPUT|IA32)"
-    find_and_copy "$temp" "$DIR/OC" "*.plist" "" "Info.plist"
-    find_and_copy "$temp" "$DIR/OC" "*.pdf" "(Configuration|Differences)" ""
+    # Copy the final zip over unless told not to
+    zip_path="$(find "$temp/OpenCorePkg/Binaries" -name "OpenCore*$TARGETS.zip" -type f -maxdepth 1 | sed -n 1p)"
+    if [ "$copy_zip" == "TRUE" ] && [ -f "$zip_path" ]; then
+        echo "Copying $(basename "$zip_path") to OC folder..."
+        cp "$zip_path" "$DIR/OC"
+    fi
+
+    # Clean out the Utilities folder - if it exists
+    utils_dir="$temp/OpenCorePkg/Utilities"
+    if [ -d "$utils_dir" ]; then
+        echo "Pruning Utilities folder..."
+        # Clear nested directories
+        find "$utils_dir" -type d -mindepth 2 -exec rm -rf {} + 2>/dev/null
+        # Strip source and unneeded files
+        find "$utils_dir" -type f -maxdepth 2 | grep -E "(?i).*(test.*|\.c|\.h|make(file)?|license)$" | while read line; do rm "$line"; done; 2>/dev/null
+        # Clear empty directories
+        find "$utils_dir" -type d -empty -exec rm -rf {} + 2>/dev/null
+        echo "Copying Utilities to OC folder..."
+        cp -R "$utils_dir" "$DIR/OC/Utilities"
+    fi    
+
+    # Copy over the Docs folder
+    docs_dir="$temp/OpenCorePkg/Docs"
+    if [ -d "$docs_dir" ]; then
+        echo "Copying Docs to OC folder..."
+        cp -R "$docs_dir" "$DIR/OC/Docs"
+    fi
+    
+    # Get the build directory - release is typically RELEASE_XCODE5
+    build_dir="$(find "$temp/OpenCorePkg/UDK/Build/OpenCorePkg" -name ""$TARGETS"_XCODE*" -type d -maxdepth 1 | sed -n 1p)" 2>/dev/null
+    if [ ! -z "$build_dir" ] && [ -d "$build_dir/$ARCHS" ]; then
+        # Now we find all .efi drivers and copy them over
+        args="-name "*.efi" -maxdepth 1"
+        find_and_copy "$build_dir/$ARCHS" "$DIR/OC" "*.efi" "-maxdepth 1"
+        # Special check for the Shell.efi file - as it gets renamed to OpenShell.efi in build_oc.tool
+        if [ -e "$DIR/OC/Shell.efi" ]; then
+            echo "Copying Shell.efi to OpenShell.efi in OC folder..."
+            cp "$DIR/OC/Shell.efi" "$DIR/OC/OpenShell.efi"
+        fi
+    fi
+
+    # Gather any .efi drivers from OcBinaryData
+    if [ -d "$temp/OcBinaryData/Drivers" ]; then
+        find_and_copy "$temp/OcBinaryData/Drivers" "$DIR/OC" "*.efi"
+    fi
 
     # Let's copy the Resources folder over too
     if [ -d "$temp/OcBinaryData/Resources" ]; then

@@ -5,9 +5,6 @@ clear
 ARCHS=X64
 TARGETS=RELEASE
 RTARGETS=RELEASE
-export ARCHS
-export TARGETS
-export RTARGETS
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
@@ -19,6 +16,7 @@ to_opencanopy="TRUE"
 to_force="FALSE"
 to_reveal="FALSE"
 copy_zip="TRUE"
+FORCE_INSTALL=0
 
 exclusions=()
 target_disk="$(nvram 4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:boot-path | sed 's/.*GPT,\([^,]*\),.*/\1/')"
@@ -37,6 +35,8 @@ function print_help () {
     echo "  -o, --no-opencanopy     skip checking OpenCanopy Resources for changes"
     echo "  -f, --force             force update OpenCanopy Resources - overrides -l"
     echo "  -l, --list-changes      only list OpenCanopy changes, don't update files"
+    echo "  -n, --no-bin-prompt     force install any missing required binaries,"
+    echo "                          exports FORCE_INSTALL=1 for efibuild.sh"
     echo "  -r, --reveal            reveal the temp folder after building"
     echo "  -i, --ia32              build IA32 (32-bit) instead of X64 (64-bit)"
     echo "  -g, --debug             build the debug version of OC and .efi drivers"
@@ -56,6 +56,7 @@ while [[ "$#" -gt 0 ]]; do
         -o|--no-opencanopy) to_opencanopy="FALSE" ;;
         -f|--force) to_force="TRUE" ;;
         -l|--list-changes) to_list="TRUE" ;;
+        -n|--no-bin-prompt) FORCE_INSTALL=1 ;;
         -r|--reveal) to_reveal="TRUE" ;;
         -i|--ia32) ARCHS=IA32 ;;
         -g|--debug) TARGETS=DEBUG; RTARGETS=DEBUG ;;
@@ -70,6 +71,9 @@ done
 export ARCHS
 export TARGETS
 export RTARGETS
+if [ "$FORCE_INSTALL" == "1" ]; then
+    export FORCE_INSTALL
+fi
 
 function clone_and_build () {
     local name="$1"
@@ -186,6 +190,10 @@ if [ "$to_build" != "FALSE" ]; then
     fi
 
     # << 'COMMENT'
+
+    # echo "Running caffeinate to prevent idle sleep..."
+    # echo " - Bound to PID $$"
+    # caffeinate -i -w $$ &
 
     temp=$(mktemp -d)
 

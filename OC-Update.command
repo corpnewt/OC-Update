@@ -43,6 +43,7 @@ function print_help () {
     echo "  -z, --no-zip            don't copy the OpenCore-[version]-[target].zip to"
     echo "                          the OC folder"
     echo "  -d DISK, --disk DISK    the mount point/identifier to target"
+    echo "  -p PATH, --path PATH    an explicit path to use for the EFI - overrides -d"
     echo "  -e NAME, --exclude NAME regex to exclude matching file/folder names from"
     echo "                          OpenCanopy Resources to update - can be used"
     echo "                          more than once, case-insensitive"
@@ -62,6 +63,7 @@ while [[ "$#" -gt 0 ]]; do
         -g|--debug) TARGETS=DEBUG; RTARGETS=DEBUG ;;
         -z|--no-zip) copy_zip="FALSE" ;;
         -d|--disk) target_disk="$2"; shift ;;
+        -p|--path) target_path="$2"; shift ;;
         -e|--exclude) exclusions+=( "$2" ); shift ;;
         *) echo "Unknown parameter passed: $1"; print_help; exit 1 ;;
     esac
@@ -273,64 +275,110 @@ fi
 
 mounted=""
 vol_name="EFI"
-if [ "$target_disk" == "" ]; then
-    # Check for an existing EFI/ESP
-    efi=""
-    if [ -d "/Volumes/EFI" ]; then
-        efi="/Volumes/EFI"
-    elif [ -d "/Volumes/ESP" ]; then
-        efi="/Volumes/ESP"
+oc_path=""
+boot_path=""
+efi=""
+
+# See if we're working with a target folder, or target disk
+if [ "$target_path" != "" ]; then
+    # Check for path/EFI/OC|BOOT
+    if [ -d "$target_path/EFI/OC" ]; then
+        oc_path="$target_path/EFI/OC"
+    fi
+    if [ -d "$target_path/EFI/BOOT" ]; then
+        boot_path="$target_path/EFI/BOOT"
+    fi
+    # Check for path/OC|BOOT
+    if [ -d "$target_path/OC" ]; then
+        oc_path="$target_path/OC"
+    fi
+    if [ -d "$target_path/BOOT" ]; then
+        boot_path="$target_path/BOOT"
+    fi
+    # Check for path/OpenCore.efi|BOOTx64.efi
+    if [ -e "$target_path/OpenCore.efi" ]; then
+        oc_path="$target_path"
+    fi
+    if [ -e "$target_path/BOOTx64.efi" ]; then
+        boot_path="$target_path"
     fi
 else
-    # Got the UUID, see if it's mounted
-    vol_name="$(diskutil info "$target_disk" | grep -i "Volume Name:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
-    efi="$(diskutil info "$target_disk" | grep -i "Mount Point:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
-    if [ "$efi" == "" ]; then
-        # Not mounted
-        mounted="False"
-        echo "$vol_name not mounted - mounting..."
-        sudo diskutil mount "$target_disk"
+    # Did not get a folder path - let's check for a disk
+    if [ "$target_disk" == "" ]; then
+        # Check for an existing EFI/ESP
+        efi=""
+        if [ -d "/Volumes/EFI" ]; then
+            efi="/Volumes/EFI"
+        elif [ -d "/Volumes/ESP" ]; then
+            efi="/Volumes/ESP"
+        fi
+    else
+        # Got the UUID, see if it's mounted
+        vol_name="$(diskutil info "$target_disk" | grep -i "Volume Name:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
         efi="$(diskutil info "$target_disk" | grep -i "Mount Point:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
+        if [ "$efi" == "" ]; then
+            # Not mounted
+            mounted="False"
+            echo "$vol_name not mounted - mounting..."
+            sudo diskutil mount "$target_disk"
+            efi="$(diskutil info "$target_disk" | grep -i "Mount Point:" | awk '{ $1=""; $2=""; print }' | sed 's/^[ \t]*//;s/[ \t]*$//')"
+        fi
+        # One last check - if not mounted, we alert the user
+        if [ "$efi" == "" ]; then
+            echo "Failed to mount $vol_name."
+            mounted=""
+        fi
     fi
-    # One last check - if not mounted, we alert the user
-    if [ "$efi" == "" ]; then
-        echo "Failed to mount $vol_name."
-        mounted=""
+    # Set our target folders if we got a mount point
+    if [ "$efi" != "" ]; then
+        oc_path="$efi/EFI/OC"
+        boot_path="$efi/EFI/BOOT"
     fi
 fi
-# Check if it's OC - and if so, let's replace some stuff
-if [ "$efi" != "" ]; then
+# Check if we have an OC path to walk
+if [ "$oc_path" != "" ] || [ "$boot_path" != "" ]; then
+    # Replace // with / in our paths
+    oc_path="$(echo "$oc_path" | tr -s /)"
+    boot_path="$(echo "$boot_path" | tr -s /)"
     echo "Updating .efi files..."
-    if [ -d "$efi/EFI/OC" ]; then
-        if [ -e "$DIR/OC/OpenCore.efi" ] && [ -e "$efi/EFI/OC/OpenCore.efi" ]; then
-            echo "Updating OpenCore.efi..."
-            cp "$DIR/OC/OpenCore.efi" "$efi/EFI/OC/OpenCore.efi"
-        fi
-        if [ -e "$DIR/OC/Bootstrap.efi" ] && [ -e "$efi/EFI/BOOT/BOOTx64.efi" ]; then
+    if [ -d "$boot_path" ]; then
+        echo "Located BOOT directory at "$boot_path"..."
+        if [ -e "$DIR/OC/Bootstrap.efi" ] && [ -e "$boot_path/BOOTx64.efi" ]; then
             echo "Verifying BOOTx64.efi..."
-            grep -i OpenCore "$efi/EFI/BOOT/BOOTx64.efi" 2>&1 >/dev/null
+            grep -i OpenCore "$boot_path/BOOTx64.efi" 2>&1 >/dev/null
             if [ "$?" == "0" ]; then
                 echo " - Belongs to OpenCore - updating..."
-                cp "$DIR/OC/Bootstrap.efi" "$efi/EFI/BOOT/BOOTx64.efi"
+                cp "$DIR/OC/Bootstrap.efi" "$boot_path/BOOTx64.efi"
             else
                 echo " - Does not belong to OpenCore - skipping..."
             fi
+        else
+            echo "Bootstrap.efi or BOOTx64.efi not found!"
         fi
-        if [ -e "$DIR/OC/Bootstrap.efi" ] && [ -e "$efi/EFI/OC/Bootstrap/Bootstrap.efi" ]; then
+    fi
+    if [ -d "$oc_path" ]; then
+        echo "Located OC directory at "$oc_path"..."
+        if [ -e "$DIR/OC/OpenCore.efi" ] && [ -e "$oc_path/OpenCore.efi" ]; then
+            echo "Updating OpenCore.efi..."
+            cp "$DIR/OC/OpenCore.efi" "$oc_path/OpenCore.efi"
+        else
+            echo "OpenCore.efi not found!"
+        fi
+        if [ -e "$DIR/OC/Bootstrap.efi" ] && [ -e "$oc_path/Bootstrap/Bootstrap.efi" ]; then
             echo "Updating Bootstrap.efi..."
-            cp "$DIR/OC/Bootstrap.efi" "$efi/EFI/OC/Bootstrap/Bootstrap.efi"
+            cp "$DIR/OC/Bootstrap.efi" "$oc_path/Bootstrap/Bootstrap.efi"
         fi
-        if [ -d "$efi/EFI/OC/Drivers" ]; then
+        if [ -d "$oc_path/Drivers" ]; then
             echo "Updating .efi drivers..."
-            ls "$efi/EFI/OC/Drivers" | while read f; do
+            ls "$oc_path/Drivers" | while read f; do
                 if [ -e "$DIR/OC/$f" ]; then
                     echo " - Found $f, replacing..."
-                    cp "$DIR/OC/$f" "$efi/EFI/OC/Drivers/$f"
+                    cp "$DIR/OC/$f" "$oc_path/Drivers/$f"
                 fi
             done
         fi
     fi
-    if [ "$to_opencanopy" != "FALSE" ] && [ -d "$DIR/OC/Resources" ]; then
+    if [ "$to_opencanopy" != "FALSE" ] && [ -d "$DIR/OC/Resources" ] && [ -d "$oc_path/Resources" ]; then
         echo "Walking OpenCanopy Resources..."
         if [ "$to_force" == "TRUE" ]; then
             response="FORCE"
@@ -339,7 +387,7 @@ if [ "$efi" != "" ]; then
         else
             response=""
         fi
-        compare_path "" "$DIR/OC/Resources" "$efi/EFI/OC/Resources" "$response" "  " "${exclusions[@]}"
+        compare_path "" "$DIR/OC/Resources" "$oc_path/Resources" "$response" "  " "${exclusions[@]}"
     fi
 fi
 

@@ -10,12 +10,14 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 oc_url="https://github.com/acidanthera/OpenCorePkg"
 oc_binary_data_url="https://github.com/acidanthera/OcBinaryData"
+oc_json_url="https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
 to_copy="TRUE"
 to_build="TRUE"
 to_opencanopy="TRUE"
 to_force="FALSE"
 to_reveal="FALSE"
 copy_zip="TRUE"
+github="FALSE"
 FORCE_INSTALL=0
 
 exclusions=()
@@ -32,6 +34,8 @@ function print_help () {
     echo "  -c, --no-copy           don't copy results to target disk"
     echo "  -b, --no-build          don't clone and build repos, use what's in the OC"
     echo "                          folder already"
+    echo "  -t --github             retrieves the latest release from github instead"
+    echo "                          of building locally"
     echo "  -o, --no-opencanopy     skip checking OpenCanopy Resources for changes"
     echo "  -f, --force             force update OpenCanopy Resources - overrides -l"
     echo "  -l, --list-changes      only list OpenCanopy changes, don't update files"
@@ -54,6 +58,7 @@ while [[ "$#" -gt 0 ]]; do
         -h|--help) print_help; exit 0 ;;
         -c|--no-copy) to_copy="FALSE" ;;
         -b|--no-build) to_build="FALSE" ;;
+        -t|--github) github="TRUE" ;;
         -o|--no-opencanopy) to_opencanopy="FALSE" ;;
         -f|--force) to_force="TRUE" ;;
         -l|--list-changes) to_list="TRUE" ;;
@@ -201,7 +206,50 @@ if [ "$to_build" != "FALSE" ]; then
 
     echo "Creating OC folder..."
     mkdir "$DIR/OC"
-    clone_and_build "OpenCorePkg" "$oc_url" "$temp"
+
+    # Download using github's json api - or clone and build locally
+    if [ "$github" == "TRUE" ]; then
+        echo "Checking github for latest release..."
+        json="$(curl -s "$oc_json_url")"
+        if [ -z "$json" ]; then
+            echo " - No data returned!  Aborting..."
+            exit 1
+        fi
+        gh_zip_url="https://github.com/acidanthera/OpenCorePkg$(echo $json | grep -Eo "\/releases\/download[^ ]+$TARGETS\.zip")"
+        if [ -z "$gh_zip_url" ]; then
+            echo " - Missing $TARGETS data!  Aborting..."
+            exit 1
+        fi
+        # Extract the version number and file name
+        ver="$(echo $gh_zip_url | cut -d'-' -f2)"
+        if [ -z "$ver" ]; then
+            echo " - Could not extract version!  Aborting..."
+            exit 1
+        fi
+        echo " - Got v$ver"
+        zip_name="$(basename $gh_zip_url)"
+        if [ -z "$zip_name" ]; then
+            echo " - Could not extract zip file name!  Aborting..."
+            exit 1
+        fi
+        echo "Downloading $zip_name..."
+        mkdir -p "$temp/OpenCorePkg/Binaries"
+        curl -L -s $gh_zip_url --output "$temp/OpenCorePkg/Binaries/$zip_name"
+        if [ ! -f "$temp/OpenCorePkg/Binaries/$zip_name" ]; then
+            echo " - Download failed!  Aborting..."
+            exit 1
+        fi
+        echo "Unzipping $zip_name..."
+        unzip -o "$temp/OpenCorePkg/Binaries/$zip_name" -d "$temp/OpenCorePkg" > /dev/null
+        echo "Moving files into place..."
+        cp "$temp/OpenCorePkg/$ARCHS/EFI/BOOT/BOOTx64.efi" "$temp/OpenCorePkg/$ARCHS/EFI/OC/Bootstrap.efi"
+        find "$temp/OpenCorePkg/$ARCHS" -name "*.efi" -print0 | xargs -0 -I {} mv {} "$temp/OpenCorePkg/$ARCHS"
+        build_dir="$temp/OpenCorePkg"
+    else
+        clone_and_build "OpenCorePkg" "$oc_url" "$temp"
+    fi
+
+    # Get the binary data
     clone_and_build "OcBinaryData" "$oc_binary_data_url" "$temp" "nobuild"
 
     # Reveal the built folder if needed
@@ -239,7 +287,9 @@ if [ "$to_build" != "FALSE" ]; then
     fi
     
     # Get the build directory - release is typically RELEASE_XCODE5
-    build_dir="$(find "$temp/OpenCorePkg/UDK/Build/OpenCorePkg" -name ""$TARGETS"_XCODE*" -type d -maxdepth 1 | sed -n 1p)" 2>/dev/null
+    if [ -z "$build_dir" ]; then
+        build_dir="$(find "$temp/OpenCorePkg/UDK/Build/OpenCorePkg" -name ""$TARGETS"_XCODE*" -type d -maxdepth 1 | sed -n 1p)" 2>/dev/null
+    fi
     if [ ! -z "$build_dir" ] && [ -d "$build_dir/$ARCHS" ]; then
         # Now we find all .efi drivers and copy them over
         args="-name "*.efi" -maxdepth 1"

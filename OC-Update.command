@@ -11,6 +11,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 oc_url="https://github.com/acidanthera/OpenCorePkg"
 oc_binary_data_url="https://github.com/acidanthera/OcBinaryData"
 oc_json_url="https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
+oc_html_url="https://github.com/acidanthera/OpenCorePkg/releases"
 to_copy="TRUE"
 to_build="TRUE"
 to_opencanopy="TRUE"
@@ -18,6 +19,7 @@ to_force="FALSE"
 to_reveal="FALSE"
 copy_zip="TRUE"
 github="FALSE"
+use_json="FALSE"
 FORCE_INSTALL=0
 
 exclusions=()
@@ -36,6 +38,8 @@ function print_help () {
     echo "                          folder already"
     echo "  -t --github             retrieves the latest release from github instead"
     echo "                          of building locally"
+    echo "  -j --use-json-api       forces the use of the github json api for downloading"
+    echo "                          instead of scraping directly - may rate limit"
     echo "  -o, --no-opencanopy     skip checking OpenCanopy Resources for changes"
     echo "  -f, --force             force update OpenCanopy Resources - overrides -l"
     echo "  -l, --list-changes      only list OpenCanopy changes, don't update files"
@@ -59,6 +63,7 @@ while [[ "$#" -gt 0 ]]; do
         -c|--no-copy) to_copy="FALSE" ;;
         -b|--no-build) to_build="FALSE" ;;
         -t|--github) github="TRUE" ;;
+        -j|--use-json-api) use_json="TRUE" ;;
         -o|--no-opencanopy) to_opencanopy="FALSE" ;;
         -f|--force) to_force="TRUE" ;;
         -l|--list-changes) to_list="TRUE" ;;
@@ -210,12 +215,25 @@ if [ "$to_build" != "FALSE" ]; then
     # Download using github's json api - or clone and build locally
     if [ "$github" == "TRUE" ]; then
         echo "Checking github for latest release..."
-        json="$(curl -s "$oc_json_url")"
-        if [ -z "$json" ]; then
-            echo " - No data returned!  Aborting..."
-            exit 1
+        if [ "$use_json" == "TRUE" ]; then
+            echo " - Using the JSON API"
+            json="$(curl -s "$oc_json_url")"
+            if [ -z "$json" ]; then
+                echo " - No data returned!  Aborting..."
+                exit 1
+            fi
+            gh_zip_url="https://github.com/acidanthera/OpenCorePkg$(echo $json | grep -Eo "\/releases\/download[^ ]+$TARGETS\.zip")"
+        else
+            # Using html instead - extract the expanded assets URL
+            echo " - Scraping the HTML directly"
+            asset_url="$(curl -s "$oc_html_url" | grep -i expanded_assets | head -n 1 | grep -Eo 'https:[^"]+')"
+            if [ -z "$asset_url" ]; then
+                echo " - No data returned!  Aborting..."
+                exit 1
+            fi
+            gh_zip_url="https://github.com/acidanthera/OpenCorePkg$(curl -s "$asset_url" | grep -Eo "\/releases\/download[^ ]+$TARGETS\.zip")"
         fi
-        gh_zip_url="https://github.com/acidanthera/OpenCorePkg$(echo $json | grep -Eo "\/releases\/download[^ ]+$TARGETS\.zip")"
+        # Check to make sure we got something
         if [ -z "$gh_zip_url" ]; then
             echo " - Missing $TARGETS data!  Aborting..."
             exit 1

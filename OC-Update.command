@@ -12,13 +12,14 @@ oc_url="https://github.com/acidanthera/OpenCorePkg"
 oc_binary_data_url="https://github.com/acidanthera/OcBinaryData"
 oc_json_url="https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
 oc_html_url="https://github.com/acidanthera/OpenCorePkg/releases"
+oc_dortania_url="https://dortania.github.io/build-repo/latest.json"
 to_copy="TRUE"
 to_build="TRUE"
 to_opencanopy="TRUE"
 to_force="FALSE"
 to_reveal="FALSE"
 copy_zip="TRUE"
-github="FALSE"
+in_source="build"
 use_json="FALSE"
 FORCE_INSTALL=0
 
@@ -36,10 +37,6 @@ function print_help () {
     echo "  -c, --no-copy           don't copy results to target disk"
     echo "  -b, --no-build          don't clone and build repos, use what's in the OC"
     echo "                          folder already"
-    echo "  -t --github             retrieves the latest release from github instead"
-    echo "                          of building locally"
-    echo "  -j --use-json-api       forces the use of the github json api for downloading"
-    echo "                          instead of scraping directly - may rate limit"
     echo "  -o, --no-opencanopy     skip checking OpenCanopy Resources for changes"
     echo "  -f, --force             force update OpenCanopy Resources - overrides -l"
     echo "  -l, --list-changes      only list OpenCanopy changes, don't update files"
@@ -55,6 +52,12 @@ function print_help () {
     echo "  -e NAME, --exclude NAME regex to exclude matching file/folder names from"
     echo "                          OpenCanopy Resources to update - can be used"
     echo "                          more than once, case-insensitive"
+    echo "  -s SRC, --source SRC    uses the passed SRC location.  SRC can be build,"
+    echo "                          github, or dortania.  Default is build.  Both github"
+    echo "                          and dortania will download prebuilt zip files."
+    echo "  -j --use-json-api       forces the use of the github json api for downloading"
+    echo "                          instead of scraping HTML directly - may rate limit"
+    echo "                          Requires '-s github'"
 }
 
 while [[ "$#" -gt 0 ]]; do
@@ -62,8 +65,6 @@ while [[ "$#" -gt 0 ]]; do
         -h|--help) print_help; exit 0 ;;
         -c|--no-copy) to_copy="FALSE" ;;
         -b|--no-build) to_build="FALSE" ;;
-        -t|--github) github="TRUE" ;;
-        -j|--use-json-api) use_json="TRUE" ;;
         -o|--no-opencanopy) to_opencanopy="FALSE" ;;
         -f|--force) to_force="TRUE" ;;
         -l|--list-changes) to_list="TRUE" ;;
@@ -75,10 +76,29 @@ while [[ "$#" -gt 0 ]]; do
         -d|--disk) target_disk="$2"; shift ;;
         -p|--path) target_path="$2"; shift ;;
         -e|--exclude) exclusions+=( "$2" ); shift ;;
+        -s|--source) in_source="$2"; shift ;;
+        -j|--use-json-api) use_json="TRUE" ;;
         *) echo "Unknown parameter passed: $1"; print_help; exit 1 ;;
     esac
     shift
 done
+
+function cleanup () {
+    if [ ! -z "$temp" ] && [ -d "$temp" ]; then
+        rm -Rf "$temp"
+    fi
+}
+
+# Ensure we clean up if there are issues
+trap cleanup EXIT
+
+# Verify our source
+source="$(echo $in_source | tr '[:upper:]' '[:lower:]' | grep -E '(build|github|dortania)')"
+if [ -z "$source" ]; then
+    echo "'$in_source' is not a valid --source option."
+    echo "The valid options are: build, github, dortania"
+    exit 1
+fi
 
 export ARCHS
 export TARGETS
@@ -213,46 +233,55 @@ if [ "$to_build" != "FALSE" ]; then
     mkdir "$DIR/OC"
 
     # Download using github's json api - or clone and build locally
-    if [ "$github" == "TRUE" ]; then
-        echo "Checking github for latest release..."
-        if [ "$use_json" == "TRUE" ]; then
-            echo " - Using the JSON API"
-            json="$(curl -s "$oc_json_url")"
+    if [ "$source" == "github" ] || [ "$source" == "dortania" ]; then
+        echo "Checking $source for latest release..."
+        if [ "$source" == "github" ]; then
+            if [ "$use_json" == "TRUE" ]; then
+                echo " - Using the JSON API"
+                json="$(curl -s "$oc_json_url")"
+                if [ -z "$json" ]; then
+                    echo " - No data returned!  Aborting..."
+                    exit 1
+                fi
+                zip_url="https://github.com/acidanthera/OpenCorePkg$(echo $json | grep -Eo "\/releases\/download[^ ]+$TARGETS\.zip")"
+            else
+                # Using html instead - extract the expanded assets URL
+                echo " - Scraping the HTML directly"
+                asset_url="$(curl -s "$oc_html_url" | grep -i expanded_assets | head -n 1 | grep -Eo 'https:[^"]+')"
+                if [ -z "$asset_url" ]; then
+                    echo " - No data returned!  Aborting..."
+                    exit 1
+                fi
+                zip_url="https://github.com/acidanthera/OpenCorePkg$(curl -s "$asset_url" | grep -Eo "\/releases\/download[^ ]+$TARGETS\.zip")"
+            fi
+        else
+            json="$(curl -s "$oc_dortania_url")"
             if [ -z "$json" ]; then
                 echo " - No data returned!  Aborting..."
                 exit 1
             fi
-            gh_zip_url="https://github.com/acidanthera/OpenCorePkg$(echo $json | grep -Eo "\/releases\/download[^ ]+$TARGETS\.zip")"
-        else
-            # Using html instead - extract the expanded assets URL
-            echo " - Scraping the HTML directly"
-            asset_url="$(curl -s "$oc_html_url" | grep -i expanded_assets | head -n 1 | grep -Eo 'https:[^"]+')"
-            if [ -z "$asset_url" ]; then
-                echo " - No data returned!  Aborting..."
-                exit 1
-            fi
-            gh_zip_url="https://github.com/acidanthera/OpenCorePkg$(curl -s "$asset_url" | grep -Eo "\/releases\/download[^ ]+$TARGETS\.zip")"
+            zip_url="https://github.com/dortania/build-repo$(echo $json | grep -Eo "\/releases\/download\/OpenCorePkg-[^ ]+$TARGETS\.zip")"
         fi
         # Check to make sure we got something
-        if [ -z "$gh_zip_url" ]; then
+        if [ -z "$zip_url" ]; then
             echo " - Missing $TARGETS data!  Aborting..."
             exit 1
         fi
         # Extract the version number and file name
-        ver="$(echo $gh_zip_url | cut -d'-' -f2)"
+        ver="$(echo $zip_url | grep -Eo "\-(\d+\.?)+\-" | cut -d'-' -f2)"
         if [ -z "$ver" ]; then
             echo " - Could not extract version!  Aborting..."
             exit 1
         fi
         echo " - Got v$ver"
-        zip_name="$(basename $gh_zip_url)"
+        zip_name="$(basename $zip_url)"
         if [ -z "$zip_name" ]; then
             echo " - Could not extract zip file name!  Aborting..."
             exit 1
         fi
         echo "Downloading $zip_name..."
         mkdir -p "$temp/OpenCorePkg/Binaries"
-        curl -L -s $gh_zip_url --output "$temp/OpenCorePkg/Binaries/$zip_name"
+        curl -L -s $zip_url --output "$temp/OpenCorePkg/Binaries/$zip_name"
         if [ ! -f "$temp/OpenCorePkg/Binaries/$zip_name" ]; then
             echo " - Download failed!  Aborting..."
             exit 1
@@ -331,7 +360,7 @@ if [ "$to_build" != "FALSE" ]; then
     fi
 
     # Clean up
-    rm -rf "$temp"
+    cleanup
 
     # COMMENT
 fi

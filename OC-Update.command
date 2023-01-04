@@ -233,7 +233,7 @@ if [ "$to_build" != "FALSE" ]; then
     mkdir "$DIR/OC"
 
     # Download using github's json api - or clone and build locally
-    if [ "$source" == "github" ] || [ "$source" == "dortania" ]; then
+    if [ "$source" != "build" ]; then
         echo "Checking $source for latest release..."
         if [ "$source" == "github" ]; then
             if [ "$use_json" == "TRUE" ]; then

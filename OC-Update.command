@@ -15,6 +15,7 @@ oc_html_url="https://github.com/acidanthera/OpenCorePkg/releases"
 oc_dortania_url="https://dortania.github.io/build-repo/latest.json"
 to_copy="TRUE"
 to_build="TRUE"
+skip_contentVisibility="FALSE"
 to_opencanopy="TRUE"
 to_force="FALSE"
 to_reveal="FALSE"
@@ -27,7 +28,7 @@ exclusions=()
 target_disk="$(nvram 4D1FDA02-38C7-4A6A-9CC6-4BCCA8B30102:boot-path | sed 's/.*GPT,\([^,]*\),.*/\1/')"
 
 function print_help () {
-    echo "usage: OC-Update.command [-h] [-c] [-b] [-o] [-f] [-l] [-r] [-g]"
+    echo "usage: OC-Update.command [-h] [-c] [-b] [-v] [-o] [-f] [-l] [-r] [-g]"
     echo "                         [-d DISK] [-e NAME] [-e NAME] [-e...]"
     echo ""
     echo "OC-Update - a bash script to update OpenCore and efi drivers"
@@ -37,6 +38,9 @@ function print_help () {
     echo "  -c, --no-copy           don't copy results to target disk"
     echo "  -b, --no-build          don't clone and build repos, use what's in the OC"
     echo "                          folder already"
+    echo "  -v, --skip-cv-files     skip checking for and writing \"Disabled\" to"
+    echo "                          .contentVisibility files in OC and BOOT folders"
+    echo "                          BOOT is only checked if BOOTx64.efi belongs to OC"
     echo "  -o, --no-opencanopy     skip checking OpenCanopy Resources for changes"
     echo "  -f, --force             force update OpenCanopy Resources - overrides -l"
     echo "  -l, --list-changes      only list OpenCanopy changes, don't update files"
@@ -65,6 +69,7 @@ while [[ "$#" -gt 0 ]]; do
         -h|--help) print_help; exit 0 ;;
         -c|--no-copy) to_copy="FALSE" ;;
         -b|--no-build) to_build="FALSE" ;;
+        -v|--skip-cv-files) skip_contentVisibility="TRUE" ;;
         -o|--no-opencanopy) to_opencanopy="FALSE" ;;
         -f|--force) to_force="TRUE" ;;
         -l|--list-changes) to_list="TRUE" ;;
@@ -446,6 +451,11 @@ if [ "$oc_path" != "" ] || [ "$boot_path" != "" ]; then
             if [ "$?" == "0" ]; then
                 echo " - Belongs to OpenCore - updating..."
                 cp "$DIR/OC/Bootstrap.efi" "$boot_path/BOOTx64.efi"
+                # Check for .contentVisibility - and create if needed
+                if [ "$skip_contentVisibility" != "TRUE" ] && [ ! -e "$boot_path/.contentVisibility" ]; then
+                    echo " - Creating disabled .contentVisibility file..."
+                    echo -n "Disabled" > "$boot_path/.contentVisibility"
+                fi
             else
                 echo " - Does not belong to OpenCore - skipping..."
             fi
@@ -460,6 +470,11 @@ if [ "$oc_path" != "" ] || [ "$boot_path" != "" ]; then
             cp "$DIR/OC/OpenCore.efi" "$oc_path/OpenCore.efi"
         else
             echo "OpenCore.efi not found!"
+        fi
+        # Check for .contentVisibility - and create if needed
+        if [ "$skip_contentVisibility" != "TRUE" ] && [ ! -e "$oc_path/.contentVisibility" ]; then
+            echo "Creating disabled .contentVisibility file..."
+            echo -n "Disabled" > "$oc_path/.contentVisibility"
         fi
         if [ -e "$DIR/OC/Bootstrap.efi" ] && [ -e "$oc_path/Bootstrap/Bootstrap.efi" ]; then
             echo "Updating Bootstrap.efi..."

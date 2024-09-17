@@ -9,7 +9,7 @@ RTARGETS=RELEASE
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 oc_url="https://github.com/acidanthera/OpenCorePkg"
-oc_binary_data_url="https://github.com/acidanthera/OcBinaryData"
+oc_binary_data_url="https://github.com/acidanthera/OcBinaryData/archive/refs/heads/master.zip"
 oc_json_url="https://api.github.com/repos/acidanthera/OpenCorePkg/releases/latest"
 oc_html_url="https://github.com/acidanthera/OpenCorePkg/releases"
 oc_dortania_url="https://dortania.github.io/build-repo/latest.json"
@@ -302,7 +302,15 @@ if [ "$to_build" != "FALSE" ]; then
     fi
 
     # Get the binary data
-    clone_and_build "OcBinaryData" "$oc_binary_data_url" "$temp" "nobuild"
+    echo "Downloading OcBinaryData..."
+    curl -sLo "$temp/OcBinaryData.zip" "$oc_binary_data_url"
+    echo "Unzipping OcBinaryData..."
+    # Get the directory name from the zip if possible
+    ocb_dir="$(zipinfo -1 "$temp/OcBinaryData.zip" "*/" | head -n 1)"
+    ocb_dir="${ocb_dir%/}"
+    unzip -o "$temp/OcBinaryData.zip" -d "$temp" > /dev/null
+    echo "Moving files into place..."
+    mv "$temp/$ocb_dir" "$temp/OcBinaryData"
 
     # Reveal the built folder if needed
     if [ "$to_reveal" == "TRUE" ]; then
